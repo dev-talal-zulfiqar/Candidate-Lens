@@ -1,0 +1,25 @@
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# Python / backend
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+backend/*.egg-info/
+backend/.ruff_cache/
+
+# Environment files
+.env
+.env.local
+
+# Local resume storage (introduced in Milestone 4)
+storage/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
