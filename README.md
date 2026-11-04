@@ -4,10 +4,12 @@ CandidateLens is an AI-assisted hiring workspace that helps hiring managers
 evaluate engineering resumes against a job description, with evidence-grounded
 scoring and a human always in control of the final decision.
 
-This repository is being built incrementally. **Milestone 1** establishes the
-monorepo foundation: a React/TypeScript frontend, a FastAPI backend with a
-health check, and a PostgreSQL database wired up via Docker Compose. No
-domain features (jobs, resumes, candidates, AI evaluation) exist yet.
+This repository is being built incrementally. So far: a React/TypeScript
+frontend, a FastAPI backend with a health check, a PostgreSQL database wired
+up via Docker Compose, and the full domain schema (jobs, requirements,
+candidates, resumes, upload batches, applications, evaluations, requirement
+results) managed through Alembic migrations. No job/resume/candidate product
+features exist yet — those arrive in later milestones.
 
 ## Project structure
 
@@ -15,6 +17,8 @@ domain features (jobs, resumes, candidates, AI evaluation) exist yet.
 candidate-lens/
 ├── frontend/   React + TypeScript + Vite + Tailwind CSS
 ├── backend/    FastAPI + SQLAlchemy + Alembic (Python 3.12)
+│   ├── app/models/     SQLAlchemy domain models
+│   └── alembic/         Database migrations
 ├── compose.yaml  Local PostgreSQL via Docker Compose
 └── .env.example
 ```
@@ -42,6 +46,7 @@ cd backend
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -58,7 +63,20 @@ failing the whole request — the backend distinguishes "the API is up" from
 
 Backend configuration is read from environment variables (see
 `backend/app/core/config.py` and the root `.env.example`). Lint with
-`ruff check app tests`; run tests with `pytest`.
+`ruff check app tests`.
+
+The domain schema (`backend/app/models/`) is managed entirely through Alembic
+migrations in `backend/alembic/versions/` — the app never creates tables on
+startup. Model integration tests run against a separate, isolated database:
+
+```bash
+createdb -O candidatelens candidatelens_test   # one-time setup
+pytest
+```
+
+Tests apply migrations to `candidatelens_test` automatically and roll back
+every test's changes, so they never touch the dev database and never require
+real AI provider credentials.
 
 ## 3. Run the frontend
 
@@ -78,13 +96,7 @@ production-build with `npm run build`.
 
 ## Current status
 
-Milestone 1 only: project scaffolding, a backend health endpoint with a
-best-effort database connectivity check, and a frontend shell that reports
-backend connectivity. No database schema, job/resume/candidate domain models,
-file uploads, or AI integration exist yet — those arrive in later milestones.
-
-## Known limitations (Milestone 1)
-
-- No database schema or migrations yet (Milestone 2).
-- The health check's database status is best-effort only; it does not retry
-  or distinguish transient vs. permanent connection failures.
+Monorepo scaffolding, a backend health endpoint, a frontend shell, and the
+full PostgreSQL domain schema (via SQLAlchemy models + Alembic migrations)
+are in place. No job/resume/candidate product features, file uploads, or AI
+integration exist yet — those arrive in later milestones.
