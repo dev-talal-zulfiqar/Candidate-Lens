@@ -1,9 +1,86 @@
 @import 'tailwindcss';
 
+@theme {
+  --font-display: 'Fraunces', serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+
+  --color-cream: #fbf6ec;
+  --color-cream-100: #f5eee0;
+  --color-cream-200: #ece1cb;
+
+  --color-ink: #251f1a;
+  --color-ink-600: #5a5048;
+  --color-ink-400: #8d8276;
+
+  --color-paper: #fffdf8;
+
+  --color-border: #e3d8c3;
+  --color-border-strong: #d2c3a5;
+
+  --color-terracotta: #c1552f;
+  --color-terracotta-600: #a3441f;
+  --color-terracotta-100: #f1dccb;
+  --color-terracotta-50: #faf0e7;
+}
+
 :root {
   color-scheme: light;
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-cream text-ink antialiased;
+  font-feature-settings: 'liga' 1;
+}
+
+h1,
+h2,
+h3 {
+  @apply font-display;
+}
+
+.eyebrow {
+  @apply font-mono text-[11px] font-semibold tracking-[0.18em] text-ink-400 uppercase;
+}
+
+.card {
+  @apply rounded-lg border border-border bg-paper;
+}
+
+.btn-primary {
+  @apply rounded-md bg-terracotta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-terracotta-600 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.btn-secondary {
+  @apply rounded-md border border-border-strong bg-paper px-4 py-2 text-sm font-medium text-ink-600 transition-colors hover:bg-cream-100 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.pill {
+  @apply inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  @apply mt-4 mb-2 font-semibold text-ink first:mt-0;
+}
+
+.markdown-body h1 {
+  @apply text-lg;
+}
+
+.markdown-body h2 {
+  @apply text-base;
+}
+
+.markdown-body p {
+  @apply mb-2;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  @apply mb-2 ml-5 list-disc;
+}
+
+.markdown-body code {
+  @apply rounded bg-cream-100 px-1 py-0.5 text-xs;
 }

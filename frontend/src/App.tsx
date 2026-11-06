@@ -1,5 +1,14 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { BrowserRouter, Route, Routes } from 'react-router'
 import { fetchHealth } from './api/client'
+import { ToastProvider } from './components/ToastProvider'
+import { CandidateApplicationPage } from './features/candidates/CandidateApplicationPage'
+import { CreateJobPage } from './features/jobs/CreateJobPage'
+import { JobDetailPage } from './features/jobs/JobDetailPage'
+import { JobListPage } from './features/jobs/JobListPage'
+
+const queryClient = new QueryClient()
 
 type ConnectionState =
   | { status: 'loading' }
@@ -34,79 +43,53 @@ function useBackendHealth(): ConnectionState {
   return state
 }
 
-function StatusBadge({ state }: { state: ConnectionState }) {
-  if (state.status === 'loading') {
-    return (
-      <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-slate-400" />
-        Checking backend&hellip;
-      </span>
-    )
-  }
-
-  if (state.status === 'connected') {
-    const dbOk = state.database === 'ok'
-    return (
-      <span
-        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium ${
-          dbOk
-            ? 'bg-emerald-100 text-emerald-800'
-            : 'bg-amber-100 text-amber-800'
-        }`}
-      >
-        <span
-          className={`h-2 w-2 rounded-full ${dbOk ? 'bg-emerald-500' : 'bg-amber-500'}`}
-        />
-        Backend connected &middot; database {dbOk ? 'ok' : 'unavailable'}
-      </span>
-    )
-  }
-
-  return (
-    <span className="inline-flex items-center gap-2 rounded-full bg-red-100 px-3 py-1 text-sm font-medium text-red-800">
-      <span className="h-2 w-2 rounded-full bg-red-500" />
-      Backend unreachable
-    </span>
-  )
-}
-
-function App() {
+function AppShell() {
   const health = useBackendHealth()
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight text-slate-900">
-              CandidateLens
-            </h1>
-            <p className="text-sm text-slate-500">
-              AI-assisted candidate evaluation workspace
-            </p>
-          </div>
-          <StatusBadge state={health} />
+      <header className="border-b border-border">
+        <div className="mx-auto max-w-6xl px-6 py-4">
+          <span className="font-display text-2xl text-ink">
+            Candidate <span className="text-terracotta">Lens</span>
+          </span>
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-5xl flex-1 flex-col items-start justify-center gap-4 px-6 py-16">
-        <h2 className="text-2xl font-semibold text-slate-900">
-          Application shell initialized
-        </h2>
-        <p className="max-w-xl text-slate-600">
-          This is the foundation for CandidateLens. Job setup, resume upload,
-          and candidate review workflows will be built on top of this shell in
-          upcoming milestones.
-        </p>
-        {health.status === 'unreachable' && (
-          <p className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+      {health.status === 'unreachable' && (
+        <div className="mx-auto w-full max-w-6xl px-6 pt-4">
+          <p role="alert" className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
             Could not reach the backend at the configured API base URL (
             {health.message}). Confirm the backend is running and{' '}
             <code>VITE_API_BASE_URL</code> is set correctly.
           </p>
-        )}
+        </div>
+      )}
+
+      <main className="flex-1">
+        <Routes>
+          <Route path="/" element={<JobListPage />} />
+          <Route path="/jobs/new" element={<CreateJobPage />} />
+          <Route path="/jobs/:jobId" element={<JobDetailPage />} />
+          <Route
+            path="/jobs/:jobId/candidates/:applicationId"
+            element={<CandidateApplicationPage />}
+          />
+        </Routes>
       </main>
     </div>
+  )
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <BrowserRouter>
+          <AppShell />
+        </BrowserRouter>
+      </ToastProvider>
+    </QueryClientProvider>
   )
 }
 
