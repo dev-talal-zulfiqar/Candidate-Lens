@@ -246,8 +246,10 @@ startup.
    it's never touched by running an evaluation, and running an evaluation
    never changes it.
 7. "Re-evaluate" on the job page redoes both stages for every candidate
-   against the current rubric and resumes in one action, and "Delete
-   pipeline" removes a job and everything that exists only for it.
+   against the current rubric and resumes — preliminary matching happens
+   immediately, and the AI stage runs in the background with the board
+   updating on its own as each candidate finishes, no refresh needed.
+   "Delete pipeline" removes a job and everything that exists only for it.
 
 ## Architecture notes and trade-offs
 
@@ -274,20 +276,23 @@ A few decisions worth knowing about if you're reading the code:
   This is also the actual prompt-injection defense: it doesn't matter
   whether the model got tricked by text embedded in a resume, because
   nothing ungrounded survives the independent check.
-- **Resume upload runs as a background task**, not inline with the request —
-  the batch is created immediately and processed (extraction, validation,
-  storage, preliminary matching) off the request thread, with per-file
-  results persisted so the frontend's progress view reflects real-time
-  state. Deep AI evaluation, by contrast, still runs synchronously when
-  triggered — fine per-candidate or for small batches, but a "re-evaluate
-  everything" action against a very large candidate pool with a real
-  (non-mock) AI provider would be a long-held request; backgrounding that
-  the same way is the natural next step.
-- **No task queue (Celery, etc.).** Background upload processing uses
-  FastAPI's built-in `BackgroundTasks` — same process, no broker, no extra
-  infrastructure. It doesn't survive a backend restart mid-batch, which is
-  an acceptable trade-off for a single-instance deployment but worth
-  knowing if this ever needs to run across multiple processes or machines.
+- **Resume upload and AI re-evaluation both run as background tasks**, not
+  inline with the request. Upload: the batch is created immediately and
+  processed (extraction, validation, storage, preliminary matching) off the
+  request thread, with per-file results persisted so the frontend's
+  progress view reflects real-time state. Editing requirements and
+  "Re-evaluate": the rubric change and the preliminary (keyword) re-match
+  happen immediately — they're fast, no external calls — but the AI stage
+  for every candidate is scheduled as a background task, since that's a
+  potentially long, rate-limited sequence of real provider calls. The
+  candidate board polls while any candidate has completed extraction but no
+  AI result yet, so results fill in without a manual refresh either way.
+- **No task queue (Celery, etc.).** Both of the above use FastAPI's
+  built-in `BackgroundTasks` — same process, no broker, no extra
+  infrastructure. Background work doesn't survive a backend restart
+  mid-batch, which is an acceptable trade-off for a single-instance
+  deployment but worth knowing if this ever needs to run across multiple
+  processes or machines.
 - **The Docker images are dev-oriented, not production builds.** Both
   containers bind-mount their source and run the same reload-on-change dev
   servers (`uvicorn --reload`, `vite`) as the local setup, rather than a

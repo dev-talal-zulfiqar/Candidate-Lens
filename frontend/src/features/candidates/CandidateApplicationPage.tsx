@@ -6,7 +6,8 @@ import { useCandidateBoardQuery } from './hooks'
 export function CandidateApplicationPage() {
   const { jobId, applicationId } = useParams<{ jobId: string; applicationId: string }>()
   const jobQuery = useJobQuery(jobId ?? '')
-  const boardQuery = useCandidateBoardQuery(jobId ?? '')
+  const hasConfirmedRequirements = (jobQuery.data?.requirements.length ?? 0) > 0
+  const boardQuery = useCandidateBoardQuery(jobId ?? '', hasConfirmedRequirements)
 
   if (!jobId || !applicationId) return null
 

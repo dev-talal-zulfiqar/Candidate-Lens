@@ -4,6 +4,7 @@ import uuid
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.db.session import open_background_session
 from app.integrations.ai_provider import AIProvider
 from app.models.application import Application
 from app.models.enums import ExtractionStatus
@@ -172,18 +173,52 @@ def run_ai_evaluations_for_job(
     return unexpected_failures
 
 
+def run_ai_evaluations_for_job_in_background(
+    job_id: uuid.UUID, provider: AIProvider, model_version: str
+) -> None:
+    """Background-task entry point for the AI evaluation stage, scheduled
+    by edit_requirements/rerun_all_evaluations' callers after the
+    triggering request has already returned.
+
+    A full AI re-evaluation run against every candidate in a pipeline —
+    potentially hundreds of real, rate-limited provider calls — was
+    previously a single synchronous loop inside the request, the same
+    scaling problem resume upload had before it was backgrounded. The
+    requirements/rubric change and the preliminary (keyword) re-match stay
+    synchronous (they're fast, no external calls); only the AI stage,
+    the genuinely slow and expensive part, moves off the request thread.
+
+    AIProvider instances are plain stateless objects (an API key + HTTP
+    client, no DB session bound to them), so the one already built for the
+    triggering request can be reused here directly — no need to rebuild it
+    with a fresh session the way the job/requirements do.
+    """
+    with open_background_session() as db:
+        job = db.execute(
+            select(Job).where(Job.id == job_id).options(selectinload(Job.requirements))
+        ).scalar_one_or_none()
+        if job is None:
+            logger.error("ai_evaluation_background_missing_job job_id=%s", job_id)
+            return
+        unexpected_failures = run_ai_evaluations_for_job(
+            db, job, job.requirements, provider, model_version
+        )
+        if unexpected_failures:
+            logger.warning(
+                "background_ai_evaluation_partial_failure job_id=%s failed_application_ids=%s",
+                job_id,
+                unexpected_failures,
+            )
+
+
 def edit_requirements(
-    db: Session,
-    job: Job,
-    requirements: list[JobRequirementCreate],
-    provider: AIProvider,
-    model_version: str,
+    db: Session, job: Job, requirements: list[JobRequirementCreate]
 ) -> list[JobRequirement]:
-    """Replace a job's confirmed requirements with a new set and fully
-    redo evaluation — both stages, for every candidate — against the new
-    rubric in the same request. Any existing evaluations were scored
-    against the old rubric, so they're wiped first rather than left
-    sitting next to requirements they no longer match.
+    """Replace a job's confirmed requirements with a new set, wipe every
+    evaluation scored against the old rubric (they no longer match), and
+    redo the preliminary (keyword) stage immediately. The AI stage is
+    scheduled separately by the caller as a background task — see
+    run_ai_evaluations_for_job_in_background.
     """
     existing_count = db.scalar(
         select(func.count(JobRequirement.id)).where(JobRequirement.job_id == job.id)
@@ -218,38 +253,19 @@ def edit_requirements(
     db.commit()
 
     backfill_preliminary_evaluations(db, job, rows)
-    unexpected_failures = run_ai_evaluations_for_job(db, job, rows, provider, model_version)
-    if unexpected_failures:
-        logger.warning(
-            "edit_requirements_partial_evaluation_failure job_id=%s failed_application_ids=%s",
-            job.id,
-            unexpected_failures,
-        )
     return rows
 
 
-def rerun_all_evaluations(
-    db: Session, job: Job, provider: AIProvider, model_version: str
-) -> None:
+def rerun_all_evaluations(db: Session, job: Job) -> None:
     """Wipe every evaluation for this job (same rubric — no requirement
-    changes) and fully redo evaluation — both stages, for every candidate —
-    against the current job description, requirements, and resumes, all
-    within this one request rather than depending on a client staying on
-    the page to finish the AI stage.
+    changes) and redo the preliminary (keyword) stage immediately. The AI
+    stage is scheduled separately by the caller as a background task — see
+    run_ai_evaluations_for_job_in_background.
     """
     wipe_evaluations_for_job(db, job.id)
     db.commit()
 
     backfill_preliminary_evaluations(db, job, job.requirements)
-    unexpected_failures = run_ai_evaluations_for_job(
-        db, job, job.requirements, provider, model_version
-    )
-    if unexpected_failures:
-        logger.warning(
-            "rerun_all_evaluations_partial_failure job_id=%s failed_application_ids=%s",
-            job.id,
-            unexpected_failures,
-        )
 
 
 def delete_job(db: Session, job: Job) -> None:

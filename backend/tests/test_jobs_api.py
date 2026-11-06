@@ -273,9 +273,10 @@ def test_rerun_evaluations_recomputes_preliminary_and_clears_ai(client):
 
     response = client.post(f"/api/jobs/{job_id}/evaluations/rerun")
 
-    assert response.status_code == 204
-    # Both stages are fully redone in this same request — not left for a
-    # client-side queue that only runs while the browser tab stays open.
+    assert response.status_code == 202
+    # The AI stage runs as a background task — the test client drains it
+    # before .post() returns control here, so this read-back already
+    # reflects the finished run; no polling/sleep needed.
     evaluations = client.get(f"/api/applications/{app_id}/evaluations").json()
     assert len(evaluations) == 2
     assert {e["stage"] for e in evaluations} == {"preliminary", "ai"}

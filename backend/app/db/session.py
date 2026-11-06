@@ -1,3 +1,4 @@
+import contextlib
 import logging
 from collections.abc import Generator
 from functools import lru_cache
@@ -30,6 +31,27 @@ def get_session_factory() -> sessionmaker[Session]:
 
 def get_db() -> Generator[Session, None, None]:
     """FastAPI dependency that yields a request-scoped database session."""
+    session = get_session_factory()()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@contextlib.contextmanager
+def open_background_session() -> Generator[Session, None, None]:
+    """Acquires a database session for work running in a FastAPI
+    BackgroundTask, after the request's own session has already closed.
+
+    A dedicated seam rather than calling get_session_factory() directly:
+    FastAPI tears down request-scoped dependencies (including the `db`
+    session from get_db) as part of sending the response, before running
+    background tasks, so a background task needs a session of its own
+    rather than reusing an already-closed one. Tests, which run an entire
+    request inside one shared, SAVEPOINT-wrapped session for isolation,
+    override this to yield that same session instead — a disconnected one
+    would never see a test's not-yet-(really)-committed data.
+    """
     session = get_session_factory()()
     try:
         yield session

@@ -117,38 +117,45 @@ def _build_provider_or_503(settings: Settings) -> tuple[object, str]:
 def edit_requirements(
     job_id: uuid.UUID,
     data: JobRequirementsCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> list[JobRequirementRead]:
-    """Replace an already-confirmed rubric and fully redo evaluation — both
-    stages, every candidate — against it in this same request, rather than
-    leaving the AI stage to a client-side queue that stops if the browser
-    tab isn't left open on this page.
+    """Replace an already-confirmed rubric: wipe evaluations scored
+    against the old one, redo the preliminary (keyword) stage immediately,
+    and schedule the AI stage for every candidate as a background task —
+    it's run server-side (not a client-side queue that stops if the
+    browser tab isn't left open) but off the request thread, since a full
+    AI re-evaluation pass over a large pipeline is a potentially long,
+    rate-limited sequence of real provider calls.
     """
     job = _get_job_or_404(db, job_id)
     provider, model_version = _build_provider_or_503(settings)
     try:
-        requirements = jobs_service.edit_requirements(
-            db, job, data.requirements, provider, model_version
-        )
+        requirements = jobs_service.edit_requirements(db, job, data.requirements)
     except jobs_service.NoRequirementsToEditError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="This job has no confirmed requirements yet — confirm some first.",
         ) from error
     db.commit()
+    background_tasks.add_task(
+        jobs_service.run_ai_evaluations_for_job_in_background, job.id, provider, model_version
+    )
     return requirements
 
 
-@router.post("/{job_id}/evaluations/rerun", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{job_id}/evaluations/rerun", status_code=status.HTTP_202_ACCEPTED)
 def rerun_evaluations(
     job_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> None:
-    """Wipe every evaluation for this job (same rubric) and fully redo
-    evaluation — both stages, every candidate — against the current job
-    description, requirements, and resumes, all within this one request.
+    """Wipe every evaluation for this job (same rubric), redo the
+    preliminary (keyword) stage immediately, and schedule the AI stage for
+    every candidate as a background task — see edit_requirements above for
+    why that part doesn't run inline with the request.
     """
     job = _get_job_or_404(db, job_id)
     if not job.requirements:
@@ -157,8 +164,11 @@ def rerun_evaluations(
             detail="This job has no confirmed requirements to evaluate against yet.",
         )
     provider, model_version = _build_provider_or_503(settings)
-    jobs_service.rerun_all_evaluations(db, job, provider, model_version)
+    jobs_service.rerun_all_evaluations(db, job)
     db.commit()
+    background_tasks.add_task(
+        jobs_service.run_ai_evaluations_for_job_in_background, job.id, provider, model_version
+    )
 
 
 @router.get("/{job_id}/requirements", response_model=list[JobRequirementRead])

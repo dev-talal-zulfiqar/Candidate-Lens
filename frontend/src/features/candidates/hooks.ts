@@ -37,9 +37,29 @@ const BOARD_QUERY: CandidatePoolQuery = {
 
 /** The merged job-detail board shows every candidate on one screen, ranked
  * best-first — no filters or pagination, matching the single reviewing
- * queue the hiring manager watches resume by resume. */
-export function useCandidateBoardQuery(jobId: string) {
-  return useCandidatePoolQuery(jobId, BOARD_QUERY)
+ * queue the hiring manager watches resume by resume.
+ *
+ * Polls while there's a candidate with completed extraction but no AI
+ * evaluation yet (and requirements are confirmed, so one's actually
+ * coming) — editing requirements and re-evaluating both run the AI stage
+ * as a background task server-side, not returned in the triggering
+ * response, so without polling here the board would just sit showing
+ * stale "Reviewing…" rows until something else happened to refetch it.
+ */
+export function useCandidateBoardQuery(jobId: string, hasConfirmedRequirements: boolean) {
+  return useQuery({
+    queryKey: ['jobs', jobId, 'candidates', BOARD_QUERY],
+    queryFn: () => getCandidatePool(jobId, BOARD_QUERY),
+    placeholderData: (previous) => previous,
+    refetchInterval: (query) => {
+      if (!hasConfirmedRequirements) return false
+      const items = query.state.data?.items ?? []
+      const pending = items.some(
+        (item) => item.extraction_status === 'completed' && item.ai_evaluation === null,
+      )
+      return pending ? 2000 : false
+    },
+  })
 }
 
 export const candidateDetailQueryKey = (candidateId: string) =>

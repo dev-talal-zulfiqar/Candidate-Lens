@@ -1,7 +1,5 @@
-import contextlib
 import logging
 import uuid
-from collections.abc import Generator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.db.session import get_session_factory
+from app.db.session import open_background_session
 from app.models.application import Application
 from app.models.candidate import Candidate
 from app.models.enums import BatchStatus, ExtractionStatus
@@ -278,26 +276,6 @@ def process_batch_files(
                 ),
             )
     finalize_batch(db, batch)
-
-
-@contextlib.contextmanager
-def open_background_session() -> Generator[Session, None, None]:
-    """Acquires a database session for background batch processing.
-
-    A dedicated seam rather than calling get_session_factory() directly:
-    FastAPI tears down request-scoped dependencies (including the `db`
-    session from get_db) as part of sending the response, before running
-    background tasks, so a background task needs a session of its own
-    rather than reusing an already-closed one. Tests, which run an entire
-    request inside one shared, SAVEPOINT-wrapped session for isolation,
-    override this to yield that same session instead — a disconnected one
-    would never see a test's not-yet-(really)-committed data.
-    """
-    session = get_session_factory()()
-    try:
-        yield session
-    finally:
-        session.close()
 
 
 def run_upload_batch_in_background(

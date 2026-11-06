@@ -64,7 +64,7 @@ function JobDetailContent({ job }: { job: NonNullable<ReturnType<typeof useJobQu
   const [editingRequirements, setEditingRequirements] = useState(false)
   const hasConfirmedRequirements = job.requirements.length > 0
 
-  const boardQuery = useCandidateBoardQuery(job.id)
+  const boardQuery = useCandidateBoardQuery(job.id, hasConfirmedRequirements)
   const items = boardQuery.data?.items ?? []
   const queue = useEvaluationQueue(job.id, items, hasConfirmedRequirements)
   const deleteJobMutation = useDeleteJobMutation()

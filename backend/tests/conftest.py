@@ -12,6 +12,7 @@ from alembic import command
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.main import app
+from app.services import jobs as jobs_service
 from app.services import resume_upload
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -106,6 +107,9 @@ def client(
     app.dependency_overrides[get_settings] = lambda: test_settings
     monkeypatch.setattr(
         resume_upload, "open_background_session", _reuse_db_session_for_background_work
+    )
+    monkeypatch.setattr(
+        jobs_service, "open_background_session", _reuse_db_session_for_background_work
     )
     try:
         with TestClient(app) as test_client:
