@@ -22,7 +22,21 @@ if TYPE_CHECKING:
 
 class Evaluation(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "evaluations"
-    __table_args__ = (Index("ix_evaluations_application_id", "application_id"),)
+    __table_args__ = (
+        Index("ix_evaluations_application_id", "application_id"),
+        # Postgres allows multiple NULLs through a unique constraint, so this
+        # only protects rows that actually set input_hash (both stages do,
+        # going forward) — it closes the race where two near-simultaneous
+        # triggers for the same application/stage/inputs could otherwise both
+        # pass an application-level "does this exist yet?" check and insert
+        # duplicate evaluation history.
+        UniqueConstraint(
+            "application_id",
+            "stage",
+            "input_hash",
+            name="uq_evaluations_application_stage_input_hash",
+        ),
+    )
 
     application_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("applications.id", ondelete="RESTRICT"), nullable=False

@@ -14,7 +14,13 @@ logger = logging.getLogger(__name__)
 @lru_cache
 def get_engine() -> Engine:
     settings = get_settings()
-    return create_engine(settings.database_url, pool_pre_ping=True)
+    return create_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_timeout=settings.db_pool_timeout_seconds,
+    )
 
 
 @lru_cache

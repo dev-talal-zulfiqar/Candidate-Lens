@@ -28,6 +28,18 @@ class ReviewStatus(StrEnum):
     REVIEWED = "reviewed"
 
 
+class CandidateDecision(StrEnum):
+    """A hiring-pipeline outcome a human reviewer records — distinct from
+    ReviewStatus, which only tracks whether anyone has looked at the
+    application yet. Unset (None) means no decision has been made; the AI
+    never sets this, only a human does.
+    """
+
+    ADVANCE = "advance"
+    HOLD = "hold"
+    DECLINE = "decline"
+
+
 class EvaluationStage(StrEnum):
     PRELIMINARY = "preliminary"
     AI = "ai"
