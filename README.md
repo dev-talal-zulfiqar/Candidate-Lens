@@ -87,21 +87,48 @@ candidate-lens/
 │   └── alembic/           Database migrations
 ├── examples/sample_job.md   Paste-ready job description + requirements for a demo
 ├── docs/screenshots/         Screenshots used in this README
-├── compose.yaml  Local PostgreSQL via Docker Compose (alternative to a local install)
+├── compose.yaml  Full stack via Docker Compose (db + backend + frontend)
 └── .env.example
 ```
 
-## Prerequisites
+## Running it
 
-- Node.js 20+ and npm
-- Python 3.12+
-- PostgreSQL 16, reachable at `localhost:5432` — either a local install
-  (e.g. `brew install postgresql@16`) or `docker compose up -d` using the
-  included `compose.yaml`
+### Option A: Docker (one command)
 
-## 1. Start PostgreSQL
+Prerequisite: Docker, with the daemon running.
 
-Using a local install:
+```bash
+docker compose up --build
+```
+
+This builds and starts all three services — Postgres, the backend
+(migrations run automatically on startup), and the frontend — with live
+reload on both backend and frontend source via bind mounts, same as running
+them locally. Open `http://localhost:5173` once it settles.
+
+To run it detached and check on it separately:
+
+```bash
+docker compose up --build -d
+docker compose ps
+docker compose logs backend --tail=50
+```
+
+Stop everything with `docker compose down` (add `-v` only if you also want
+to delete the Postgres volume — that deletes all data).
+
+To use the real OpenAI provider instead of the mock default, see "AI
+evaluation provider" below — it works exactly the same way here, since
+`backend/.env` is inside the bind-mounted directory. After creating or
+editing it, restart just that container (env vars are read once at process
+startup, not hot-reloaded): `docker compose restart backend`.
+
+### Option B: Local Python/Node
+
+Prerequisites: Node.js 20+, Python 3.12+, and PostgreSQL 16 reachable at
+`localhost:5432` (e.g. `brew install postgresql@16`).
+
+**1. Start PostgreSQL**
 
 ```bash
 brew services start postgresql@16
@@ -110,17 +137,10 @@ createdb -O candidatelens candidatelens
 createdb -O candidatelens candidatelens_test   # used by the backend test suite
 ```
 
-Or with Docker instead:
-
-```bash
-cp .env.example .env
-docker compose up -d
-```
-
-Either way, credentials should match `DATABASE_URL` in `.env.example`
+Credentials should match `DATABASE_URL` in `.env.example`
 (`candidatelens` / `candidatelens`).
 
-## 2. Run the backend
+**2. Run the backend**
 
 ```bash
 cd backend
@@ -148,6 +168,22 @@ Backend configuration is read from environment variables (see
 applies migrations to `candidatelens_test` automatically and rolls back
 every test's changes, so it never touches the dev database).
 
+**3. Run the frontend**
+
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Open the printed local URL (default `http://localhost:5173`). The app shell
+shows a live connectivity badge confirming it can reach the backend's health
+endpoint, read from `VITE_API_BASE_URL`.
+
+Lint with `npm run lint`; format with `npm run format`; type-check and
+production-build with `npm run build`.
+
 ### AI evaluation provider
 
 By default `AI_PROVIDER=mock` — a deterministic, credential-free provider
@@ -173,22 +209,6 @@ the API again.
 The domain schema (`backend/app/models/`) is managed entirely through Alembic
 migrations in `backend/alembic/versions/` — the app never creates tables on
 startup.
-
-## 3. Run the frontend
-
-```bash
-cd frontend
-cp .env.example .env
-npm install
-npm run dev
-```
-
-Open the printed local URL (default `http://localhost:5173`). The app shell
-shows a live connectivity badge confirming it can reach the backend's health
-endpoint, read from `VITE_API_BASE_URL`.
-
-Lint with `npm run lint`; format with `npm run format`; type-check and
-production-build with `npm run build`.
 
 ## Using the app
 
@@ -268,6 +288,11 @@ A few decisions worth knowing about if you're reading the code:
   infrastructure. It doesn't survive a backend restart mid-batch, which is
   an acceptable trade-off for a single-instance deployment but worth
   knowing if this ever needs to run across multiple processes or machines.
+- **The Docker images are dev-oriented, not production builds.** Both
+  containers bind-mount their source and run the same reload-on-change dev
+  servers (`uvicorn --reload`, `vite`) as the local setup, rather than a
+  built/optimized production image — intentional for a one-command local
+  dev experience, not meant as a deployment artifact as-is.
 
 ## Current status
 
@@ -279,4 +304,6 @@ screen. 173 backend tests cover validation, extraction edge cases, scoring
 math, evidence verification, prompt-injection resistance, caching, the
 concurrency race condition described above, and background-task resilience;
 the frontend has been manually verified against a live backend through the
-entire journey from job creation to a reviewed, AI-evaluated candidate.
+entire journey from job creation to a reviewed, AI-evaluated candidate. The
+Docker Compose path (`docker compose up --build`) has been confirmed to
+bring up all three services and serve a working app end to end.

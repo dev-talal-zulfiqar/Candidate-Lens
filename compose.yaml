@@ -16,5 +16,41 @@ services:
       timeout: 5s
       retries: 5
 
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      # Overrides backend/.env's "localhost" — inside Compose's network the
+      # database is reachable at its service name, not localhost. If a
+      # backend/.env exists on the host it's still picked up (it's inside
+      # the bind mount below) for everything else, e.g. OPENAI_API_KEY /
+      # AI_PROVIDER=openai to use the real provider instead of the mock
+      # default — these two just need the container-specific value.
+      DATABASE_URL: postgresql+psycopg://candidatelens:candidatelens@db:5432/candidatelens
+      CORS_ORIGINS: http://localhost:5173
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      # Anonymous volume so the container's own (Linux-built) node_modules
+      # isn't shadowed by the bind mount above — the host's node_modules,
+      # if any, is probably built for a different OS/architecture.
+      - /app/node_modules
+    depends_on:
+      - backend
+
 volumes:
   candidatelens_db_data:
